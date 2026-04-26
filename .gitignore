@@ -1,0 +1,20 @@
+# Secrets
+.env
+
+# Database volume
+dbdata/
+
+# Backups
+backups/
+
+# Java build artifacts (compiled by Docker — not needed in repo)
+out/
+*.class
+*.jar
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,111 @@
+version: "3.9"
+
+# =============================================================================
+# NetworkMemories — Metal Gear Online 1 (mgops-docker)
+# Usage:
+#   make init        → first-time setup
+#   make run-daemon  → start everything in background
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # DATABASE
+  # ---------------------------------------------------------------------------
+  biomysql:
+    image: mysql:8.0
+    container_name: mgops-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-mgops}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "127.0.0.1:${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - ./dbdata:/var/lib/mysql
+      - ./mgops.sql:/docker-entrypoint-initdb.d/01-mgops.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost",
+             "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # DNS — resolves *.konamionline.com → SERVER_IP for PS2 clients
+  # ---------------------------------------------------------------------------
+  mgops-dns:
+    build:
+      context: ./docker/dnsmasq
+    container_name: mgops-dns
+    restart: unless-stopped
+    environment:
+      SERVER_IP: ${SERVER_IP}
+    ports:
+      - "${DNS_PORT:-53}:53/udp"
+      - "${DNS_PORT:-53}:53/tcp"
+    cap_add:
+      - NET_BIND_SERVICE
+
+  # ---------------------------------------------------------------------------
+  # GATEWAY — Apache + PHP (account management endpoints for PS2)
+  # ---------------------------------------------------------------------------
+  mgops-gateway:
+    build:
+      context: ./docker/gateway
+    container_name: mgops-gateway
+    restart: unless-stopped
+    environment:
+      SERVER_IP: ${SERVER_IP}
+      MYSQL_HOST: biomysql
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-mgops}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    ports:
+      - "${GATEWAY_HTTP_PORT:-80}:80"
+      - "${GATEWAY_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./docker/gateway/static:/var/www/html:ro
+      - ./docker/gateway/conf/vhost.conf:/etc/apache2/sites-enabled/000-default.conf:ro
+      - gateway_certs:/etc/dnas
+    depends_on:
+      biomysql:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # MGO1 JAVA SERVER
+  # ---------------------------------------------------------------------------
+  mgops-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mgops-server
+    restart: unless-stopped
+    environment:
+      SERVER_IP: ${SERVER_IP}
+      MYSQL_HOST: biomysql
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-mgops}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MGO1_INTERNAL_AUTH: ${MGO1_INTERNAL_AUTH:-6731}
+      MGO1_INTERNAL_LOBBY: ${MGO1_INTERNAL_LOBBY:-6732}
+      MGO1_INTERNAL_GAME1: ${MGO1_INTERNAL_GAME1:-6733}
+      MGO1_INTERNAL_GAME2: ${MGO1_INTERNAL_GAME2:-6734}
+      MGO1_INTERNAL_GAME3: ${MGO1_INTERNAL_GAME3:-6735}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "${MGO1_PORT_AUTH:-5731}:${MGO1_INTERNAL_AUTH:-6731}"
+      - "${MGO1_PORT_LOBBY:-5732}:${MGO1_INTERNAL_LOBBY:-6732}"
+      - "${MGO1_PORT_GAME1:-5733}:${MGO1_INTERNAL_GAME1:-6733}"
+      - "${MGO1_PORT_GAME2:-5734}:${MGO1_INTERNAL_GAME2:-6734}"
+      - "${MGO1_PORT_GAME3:-5735}:${MGO1_INTERNAL_GAME3:-6735}"
+    depends_on:
+      biomysql:
+        condition: service_healthy
+
+volumes:
+  gateway_certs:

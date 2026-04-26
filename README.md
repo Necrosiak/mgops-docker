@@ -166,7 +166,7 @@ See [`docs/troubleshooting.md`](docs/troubleshooting.md)
 
 - Original server: [curi0us/mgops](https://github.com/curi0us/mgops)
 - SaveMGO community: [savemgo.com](https://savemgo.com)
-- This fork: [NetworkMemories](https://https://network-memories.com)
+- This fork: [NetworkMemories](https://network-memories.com)
 
 ## License
 
